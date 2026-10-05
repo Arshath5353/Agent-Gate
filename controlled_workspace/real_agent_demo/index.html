@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmic Login</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="stars"></div>
+    <div class="twinkling"></div>
+    <div class="clouds"></div>
+
+    <div class="login-wrapper">
+        <div class="login-card">
+            <div class="card-header">
+                <h2>Welcome Explorer</h2>
+                <p>Sign in to continue your journey</p>
+            </div>
+
+            <form id="authForm">
+                <div class="input-container">
+                    <input type="email" id="email" placeholder=" " required />
+                    <label for="email">Email Address</label>
+                    <div class="b-line"></div>
+                </div>
+
+                <div class="input-container">
+                    <input type="password" id="password" placeholder=" " required />
+                    <label for="password">Password</label>
+                    <div class="b-line"></div>
+                </div>
+
+                <div class="options">
+                    <label class="checkbox-container">
+                        <input type="checkbox" checked="checked">
+                        <span class="checkmark"></span>
+                        Remember me
+                    </label>
+                    <a href="#" class="forgot">Reset Password?</a>
+                </div>
+
+                <button type="submit" class="submit-btn">
+                    <span>Launch Sequence</span>
+                    <div class="spinner"></div>
+                </button>
+            </form>
+
+            <div class="separator">
+                <span>Or connect via</span>
+            </div>
+
+            <div class="social-grid">
+                <button class="social-btn">Google</button>
+                <button class="social-btn">Apple</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
