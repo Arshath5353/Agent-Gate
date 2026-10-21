@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from app.services.policy_engine import evaluate, is_path_allowed
+from app.services.policy_engine import NormalizedAction, evaluate, is_path_allowed
 from app.config import WORKSPACE
 
 def test_normal_file_allowed(): assert evaluate("READ","src/login.js",{})["decision"]=="ALLOW"
@@ -19,3 +19,20 @@ def test_symlink_escape_blocked(tmp_path):
     try: (root/"escape").symlink_to(outside,target_is_directory=True)
     except OSError as exc: pytest.skip(f"symlink creation is unavailable: {exc}")
     assert not is_path_allowed("escape/secret",root)
+
+def test_normalized_tool_call_is_agent_independent_and_supported():
+    action = NormalizedAction.create("TOOL_CALL", "browser.search", {"tool": "search"})
+    result = evaluate(action)
+    assert result["decision"] == "MONITOR"
+    assert result["matched_policies"] == []
+
+def test_evaluator_accepts_a_persisted_policy_mapping():
+    rule = {"id": "custom-rule", "category": "sensitive", "pattern": "confidential", "severity": "CRITICAL", "outcome": "BLOCK", "description": "Confidential resources are blocked"}
+    result = evaluate("READ", "src/confidential.txt", {}, policies=[rule])
+    assert result["decision"] == "BLOCK"
+    assert result["matched_policies"][0]["id"] == "custom-rule"
+
+def test_unknown_resource_is_not_automatically_allowed():
+    result = evaluate("READ", "runtime_test/payload.zzz", {})
+    assert result["resource_classification"]["classification"] == "UNKNOWN"
+    assert result["decision"] == "MONITOR"

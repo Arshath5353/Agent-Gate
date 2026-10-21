@@ -1,6 +1,6 @@
 # AgentGate
 
-**AgentGate: A Runtime Security Firewall for AI Coding Agents** is a local V2 prototype that evaluates agent action requests outside the model. It includes deterministic policy and risk engines, SQLite audit persistence, approvals, a simulator, REST and WebSocket APIs, and a React dashboard.
+**AgentGate: A Runtime Security Gateway for AI Agents** is a local V2 prototype that evaluates agent action requests outside the model. It includes deterministic policy and risk engines, SQLite audit persistence, approvals, a simulator, REST and WebSocket APIs, and a React dashboard.
 
 > The included simulator is not a Codex interception mechanism. It submits action descriptions to the AgentGate API. AgentGate never runs shell commands, reads or writes the requested target file, contacts external destinations, or exposes actual credentials. “Execute” and approval of an action only record a simulated authorization result.
 
@@ -102,6 +102,31 @@ python simulator\agent_simulator.py
 ```
 
 To attach it to an existing task, pass `--task-id TASK-ID`. It submits the listed descriptions only; it never executes them.
+
+## Generic Agent Integration API
+
+External agents can submit decision requests through `POST /api/agent/actions/check`. Agent identity is supplied by the caller and is independent of the integration source. The API defaults to a scoped Agent API task when `task_id` is omitted; callers can supply a task to use its existing workspace scope.
+
+```json
+{
+  "agent": {"id": "example-agent", "name": "Example Coding Agent", "version": "1.0"},
+  "session_id": "demo-session-001",
+  "source": "custom-connector",
+  "action": {"type": "READ", "resource": "src/config.json", "metadata": {}}
+}
+```
+
+The response includes `decision`, `risk.level`, `risk.score`, `resource.classification`, `reasons`, `matched_policies`, `action_id`, and an `approval_id` when the decision requires approval. The action follows the same normalized action, resource classification, persisted policy, risk, approval, SQLite audit, and WebSocket path as existing requests. The generic provenance is recorded as `agent_api`; the optional `source` value is retained as `integration_source` metadata.
+
+Run the decision-only client with `python simulator\agent_api_demo.py`. It submits harmless descriptions, including a dangerous command string, to the API for evaluation. It never performs the described operations. This endpoint is a decision gateway: it answers whether the requested action would be allowed under AgentGate's current rules; it does not intercept or prevent an external agent from carrying out that action. This is a local integration API; authentication is future work. Keep it bound to localhost and use it only on a trusted development machine.
+
+## Protected resources and policy precedence
+
+Protected-resource rules reuse the `policies` table. They store a workspace-relative path or glob, explicit resource classification, `MONITOR`/`APPROVAL`/`BLOCK` decision, enabled state, description, and timestamps. Absolute paths are accepted only when they resolve inside `controlled_workspace`; traversal, ambiguous home-directory aliases, and patterns through symlinks that escape the workspace are rejected. Matching is case-insensitive and uses normalized paths plus glob matching, so a rule such as `secrets/*` does not match `secrets-backup/*`.
+
+For an evaluated action, precedence is: (1) hard safeguards for traversal, workspace escapes, protected private-key paths, and dangerous commands; (2) an enabled matching protected-resource rule; (3) other persisted policy rules; (4) automatic resource classification; and (5) default risk behavior. When multiple protected-resource rules match, the most restrictive decision wins (`BLOCK` before `APPROVAL` before `MONITOR`); ties prefer the more-specific pattern. A protected-resource rule can override automatic classification and lower-priority rules, but cannot override a hard safeguard. `UNKNOWN` file resources require monitoring by default. Matched protected-resource IDs, patterns, configured classifications and decisions, and the reason are stored in action metadata and the evaluation audit event.
+
+Existing SQLite databases receive the nullable protected-resource columns through an idempotent startup migration; existing policy rows are retained and remain usable.
 
 ## Security model and threat model
 

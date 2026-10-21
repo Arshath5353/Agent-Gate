@@ -1,5 +1,5 @@
-export const API_BASE_URL = "http://127.0.0.1:8001/api";
-export const EVENTS_WS_URL = "ws://127.0.0.1:8001/ws/events";
+export const API_BASE_URL = "http://127.0.0.1:8010/api";
+export const EVENTS_WS_URL = "ws://127.0.0.1:8010/ws/events";
 
 export async function apiRequest<T = any>(
   path: string,

@@ -1,5 +1,7 @@
 from fastapi.testclient import TestClient
 from app.main import app
+from app.database.database import SessionLocal
+from app.models import Policy
 
 def test_action_approval_audit_and_websocket():
     with TestClient(app) as client:
@@ -8,6 +10,8 @@ def test_action_approval_audit_and_websocket():
             result=client.post("/api/actions/check",json={"task_id":task["task_id"],"action_type":"READ","resource":".env"}).json()
             event=ws.receive_json()
         assert result["decision"]=="APPROVAL" and result["approval_id"]
+        assert any(rule["pattern"]==".env" for rule in result["matched_policies"])
+        assert result["metadata"]["resource_classification"]["classification"]=="SENSITIVE"
         assert event["type"]=="ACTION_DECISION" and event["action_id"]==result["action_id"]
         approvals=client.get("/api/approvals").json(); pending=next(x for x in approvals if x["approval_id"]==result["approval_id"])
         response=client.post(f"/api/approvals/{pending['approval_id']}/approve",json={})
@@ -15,7 +19,9 @@ def test_action_approval_audit_and_websocket():
         assert response.json()["action"]["executed"] is True
         executed=client.post(f"/api/actions/{result['action_id']}/execute")
         assert executed.status_code==200 and executed.json()["executed"] is True
-        assert client.get("/api/audit").json()
+        audit=client.get("/api/audit").json()
+        evaluated=next(item for item in audit if item["event_type"]=="ACTION_EVALUATED" and item["action_id"]==result["action_id"])
+        assert evaluated["details"]["resource_classification"]["classification"]=="SENSITIVE"
 
 def test_demo_scenarios():
     with TestClient(app) as client:
@@ -44,7 +50,7 @@ def test_development_origins_and_dashboard_routes():
             response=client.options("/api/stats",headers={"Origin":origin,"Access-Control-Request-Method":"GET"})
             assert response.headers.get("access-control-allow-origin")==origin
         schema=client.get("/openapi.json").json()
-        required={("/api/stats","get"),("/api/actions","get"),("/api/approvals","get"),("/api/tasks","get"),("/api/tasks","post"),("/api/policies","get"),("/api/audit","get"),("/api/demo/run","post"),("/api/runtime/mode","get"),("/api/runtime/mode","put"),("/api/approvals/{approval_id}/approve","post"),("/api/approvals/{approval_id}/block","post")}
+        required={("/api/stats","get"),("/api/actions","get"),("/api/agent/actions/check","post"),("/api/approvals","get"),("/api/tasks","get"),("/api/tasks","post"),("/api/policies","get"),("/api/audit","get"),("/api/demo/run","post"),("/api/runtime/mode","get"),("/api/runtime/mode","put"),("/api/approvals/{approval_id}/approve","post"),("/api/approvals/{approval_id}/deny","post"),("/api/approvals/{approval_id}/block","post"),("/api/approvals/approve-pending","post"),("/api/approvals/deny-pending","post")}
         actual={(path,method) for path,methods in schema["paths"].items() for method in methods}
         assert required <= actual
 
@@ -72,3 +78,25 @@ def test_windows_security_audit_source_is_stored_without_schema_changes():
         mode=client.put("/api/runtime/mode",json={"mode":"WINDOWS_SECURITY_AUDIT","details":{"pid":12345}})
         assert mode.json()["mode"]=="WINDOWS_SECURITY_AUDIT"
         client.put("/api/runtime/mode",json={"mode":"SIMULATOR","details":{}})
+
+def test_persisted_custom_policy_drives_action_decision_and_is_recorded():
+    policy_id="POL-TEST-DATA-DRIVEN"
+    with SessionLocal() as db:
+        db.merge(Policy(id=policy_id,category="sensitive",pattern="private-report",severity="CRITICAL",outcome="BLOCK",description="Custom persisted block rule"))
+        db.commit()
+    try:
+        with TestClient(app) as client:
+            task=client.post("/api/tasks",json={"name":"Persisted policy test"}).json()
+            response=client.post("/api/actions/check",json={"task_id":task["task_id"],"agent":"generic-agent","action_type":"READ","resource":"src/private-report.txt"})
+            assert response.status_code==200
+            action=response.json()
+            assert action["decision"]=="BLOCK"
+            assert any(rule["id"]==policy_id for rule in action["matched_policies"])
+            assert any(rule["id"]==policy_id for rule in action["metadata"]["matched_policies"])
+            assert action["metadata"]["resource_classification"]["classification"]=="SENSITIVE"
+    finally:
+        with SessionLocal() as db:
+            rule=db.get(Policy,policy_id)
+            if rule:
+                db.delete(rule)
+                db.commit()

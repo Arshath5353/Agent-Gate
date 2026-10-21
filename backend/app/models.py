@@ -39,6 +39,21 @@ class Approval(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     action: Mapped[Action] = relationship(back_populates="approval")
+
+class BrokerExecution(Base):
+    """One-shot execution attempt associated with exactly one evaluated action."""
+    __tablename__ = "broker_executions"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    action_id: Mapped[str] = mapped_column(ForeignKey("actions.id"), unique=True, index=True)
+    approval_id: Mapped[str | None] = mapped_column(ForeignKey("approvals.id"), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(24), index=True)
+    result_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    action: Mapped[Action] = relationship()
+    approval: Mapped[Approval | None] = relationship()
 class AuditEvent(Base):
     __tablename__ = "audit_events"
     id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -55,4 +70,15 @@ class Policy(Base):
     severity: Mapped[str] = mapped_column(String)
     outcome: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(Text)
+    resource_classification: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    action_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    risk_level: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reference_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    reference_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    enabled: Mapped[bool | None] = mapped_column(default=True, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=now, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=now, nullable=True)
 Index("ix_actions_task_created", Action.task_id, Action.created_at)
